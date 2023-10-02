@@ -8,7 +8,6 @@ using namespace std;
 namespace TokenType = parse::token_type;
 
 namespace {
-    
 bool operator==(const parse::Token& token, char c) {
     const auto* p = token.TryAs<TokenType::Char>();
     return p != nullptr && p->value == c;
@@ -31,12 +30,14 @@ public:
         while (!lexer_.CurrentToken().Is<TokenType::Eof>()) {
             result->AddStatement(ParseStatement());
         }
+
         return result;
     }
 
 private:
-    // Suite -> NEWLINE INDENT (Statement) + DEDENT
-    unique_ptr<ast::Statement> ParseSuite() { // NOLINT
+    // Suite -> NEWLINE INDENT (Statement)+ DEDENT
+    unique_ptr<ast::Statement> ParseSuite()  // NOLINT
+    {
         lexer_.Expect<TokenType::Newline>();
         lexer_.ExpectNext<TokenType::Indent>();
 
@@ -54,7 +55,8 @@ private:
     }
 
     // Methods -> [def id(Params) : Suite]*
-    vector<runtime::Method> ParseMethods() { // NOLINT
+    vector<runtime::Method> ParseMethods()  // NOLINT
+    {
         vector<runtime::Method> result;
 
         while (lexer_.CurrentToken().Is<TokenType::Def>()) {
@@ -82,7 +84,8 @@ private:
     }
 
     // ClassDefinition -> Id ['(' Id ')'] : new_line indent MethodList dedent
-    unique_ptr<ast::Statement> ParseClassDefinition() { // NOLINT
+    unique_ptr<ast::Statement> ParseClassDefinition()  // NOLINT
+    {
         string class_name = lexer_.Expect<TokenType::Id>().value;
 
         lexer_.NextToken();
@@ -168,7 +171,8 @@ private:
     }
 
     // Expr -> Adder ['+'/'-' Adder]*
-    unique_ptr<ast::Statement> ParseExpression() { // NOLINT
+    unique_ptr<ast::Statement> ParseExpression()  // NOLINT
+    {
         unique_ptr<ast::Statement> result = ParseAdder();
         while (lexer_.CurrentToken() == '+' || lexer_.CurrentToken() == '-') {
             char op = lexer_.CurrentToken().As<TokenType::Char>().value;
@@ -184,7 +188,8 @@ private:
     }
 
     // Adder -> Mult ['*'/'/' Mult]*
-    unique_ptr<ast::Statement> ParseAdder() { // NOLINT
+    unique_ptr<ast::Statement> ParseAdder()  // NOLINT
+    {
         unique_ptr<ast::Statement> result = ParseMult();
         while (lexer_.CurrentToken() == '*' || lexer_.CurrentToken() == '/') {
             char op = lexer_.CurrentToken().As<TokenType::Char>().value;
@@ -208,7 +213,8 @@ private:
     //       | FALSE
     //       | DottedIds '(' ExprList ')'
     //       | DottedIds
-    unique_ptr<ast::Statement> ParseMult() { // NOLINT
+    unique_ptr<ast::Statement> ParseMult()  // NOLINT
+    {
         if (lexer_.CurrentToken() == '(') {
             lexer_.NextToken();
             auto result = ParseTest();
@@ -281,7 +287,8 @@ private:
         return make_unique<ast::VariableValue>(std::move(names));
     }
 
-    vector<unique_ptr<ast::Statement>> ParseTestList() { // NOLINT
+    vector<unique_ptr<ast::Statement>> ParseTestList()  // NOLINT
+    {
         vector<unique_ptr<ast::Statement>> result;
         result.push_back(ParseTest());
 
@@ -293,7 +300,8 @@ private:
     }
 
     // Condition -> if LogicalExpr: Suite [else: Suite]
-    unique_ptr<ast::Statement> ParseCondition() { // NOLINT
+    unique_ptr<ast::Statement> ParseCondition()  // NOLINT
+    {
         lexer_.Expect<TokenType::If>();
         lexer_.NextToken();
 
@@ -319,7 +327,8 @@ private:
     // AndTest -> NotTest [AND NotTest]
     // NotTest -> [NOT] NotTest
     //          | Comparison
-    unique_ptr<ast::Statement> ParseTest() { // NOLINT
+    unique_ptr<ast::Statement> ParseTest()  // NOLINT
+    {
         auto result = ParseAndTest();
         while (lexer_.CurrentToken().Is<TokenType::Or>()) {
             lexer_.NextToken();
@@ -328,7 +337,8 @@ private:
         return result;
     }
 
-    unique_ptr<ast::Statement> ParseAndTest() { // NOLINT
+    unique_ptr<ast::Statement> ParseAndTest()  // NOLINT
+    {
         auto result = ParseNotTest();
         while (lexer_.CurrentToken().Is<TokenType::And>()) {
             lexer_.NextToken();
@@ -337,7 +347,8 @@ private:
         return result;
     }
 
-    unique_ptr<ast::Statement> ParseNotTest() { // NOLINT
+    unique_ptr<ast::Statement> ParseNotTest()  // NOLINT
+    {
         if (lexer_.CurrentToken().Is<TokenType::Not>()) {
             lexer_.NextToken();
             return make_unique<ast::Not>(ParseNotTest());  // NOLINT
@@ -346,7 +357,8 @@ private:
     }
 
     // Comparison -> Expr [COMP_OP Expr]
-    unique_ptr<ast::Statement> ParseComparison() { // NOLINT
+    unique_ptr<ast::Statement> ParseComparison()  // NOLINT
+    {
         auto result = ParseExpression();
 
         const auto tok = lexer_.CurrentToken();
@@ -387,7 +399,8 @@ private:
     // Statement -> SimpleStatement Newline
     //           | class ClassDefinition
     //           | if Condition
-    unique_ptr<ast::Statement> ParseStatement() { // NOLINT
+    unique_ptr<ast::Statement> ParseStatement()  // NOLINT
+    {
         const auto& tok = lexer_.CurrentToken();
 
         if (tok.Is<TokenType::Class>()) {

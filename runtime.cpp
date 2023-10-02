@@ -44,34 +44,31 @@ ObjectHolder::operator bool() const {
 }
 
 bool IsTrue(const ObjectHolder& object) {
-    if (const auto* ptr = object.TryAs<Number>()) {
-        return ptr->GetValue() != 0;
+    auto ptr_number = object.TryAs<Number>();
+    auto ptr_string = object.TryAs<String>();
+    auto ptr_bool = object.TryAs<Bool>();
+    auto ptr_bool_vo = object.TryAs<ValueObject<bool>>();
+
+    if (ptr_number) return ptr_number->GetValue();
+    else if (ptr_string) {
+        if (ptr_string->GetValue() == "") return false;
+        else return true;
     }
-    else if (const auto* ptr = object.TryAs<String>()) {
-        return !ptr->GetValue().empty();
-    }
-    else if (const auto* ptr = object.TryAs<Bool>()) {
-        return ptr->GetValue() == true;
-    }
-    else {
-        return false;
-    }
+    else if (ptr_bool) return ptr_bool->GetValue();
+    else if (ptr_bool_vo) return ptr_bool_vo->GetValue();
+
+    return false;
 }
 
 void ClassInstance::Print(std::ostream& os, Context& context) {
-    if (HasMethod("__str__", 0))
-        Call("__str__", {}, context).Get()->Print(os, context);
-    else
-        os << this;
+    auto ptr_method = class_.GetMethod("__str__");
+    if (ptr_method) Call(ptr_method->name, {}, context)->Print(os, context);
+    else os << this;
 }
 
 bool ClassInstance::HasMethod(const std::string& method, size_t argument_count) const {
-    const Method* str = cls_.GetMethod(method);    
-    if (str != nullptr) {
-        if (str->formal_params.size() == argument_count) {
-            return true;
-        }
-    }
+    auto ptr_method = class_.GetMethod(method);
+    if (ptr_method && ptr_method->formal_params.size() == argument_count) return true;
     return false;
 }
 
@@ -83,97 +80,90 @@ const Closure& ClassInstance::Fields() const {
     return fields_;
 }
 
-ClassInstance::ClassInstance(const Class& cls) 
-    : cls_(cls)
-{}
+ClassInstance::ClassInstance(const Class& cls)
+    : class_(cls) {}
 
 ObjectHolder ClassInstance::Call(const std::string& method,
                                  const std::vector<ObjectHolder>& actual_args,
                                  Context& context) {
-    if (HasMethod(method, actual_args.size())) {
-        Closure args;
-        args["self"s] = ObjectHolder::Share(*this);
+    if (!this->HasMethod(method, actual_args.size())) throw std::runtime_error("No method"s);
 
-        const Method* method_ptr = cls_.GetMethod(method);
-        for (size_t i = 0; i < actual_args.size(); ++i) {
-            args[method_ptr->formal_params[i]] = actual_args[i];
-        }
-        return method_ptr->body->Execute(args, context);
-    }    
+    auto ptr_method = class_.GetMethod(method);
+    Closure cls;
+    cls["self"] = ObjectHolder::Share(*this);
 
-    throw std::runtime_error("Not implemented"s);
+    for (size_t i = 0; i < ptr_method->formal_params.size(); ++i) {
+        cls[ptr_method->formal_params[i]] = actual_args[i];
+    }
+    return ptr_method->body->Execute(cls, context);
 }
 
-Class::Class(std::string name, std::vector<Method> methods, const Class* parent)
-    : name_(std::move(name))
-    , methods_(std::move(methods))
-    , parent_(parent)
-{
-    if (parent_ != nullptr) {
+Class::Class(std::string name, std::vector<Method> methods, const Class* parent) 
+    : name_(move(name)), methods_(move(methods)), parent_(move(parent)) {
+    if (parent_) {
         for (const auto& method : parent_->methods_) {
-            name_to_method_[method.name] = &method;
+            name_method_ptr_[method.name] = &method;
         }
     }
-
     for (const auto& method : methods_) {
-        name_to_method_[method.name] = &method;
+        name_method_ptr_[method.name] = &method;
     }
 }
 
 const Method* Class::GetMethod(const std::string& name) const {
-    auto it = name_to_method_.find(name);
-
-    if (it != name_to_method_.end()) {
-        return it->second;
-    }
-
-    return nullptr;
+    if (name_method_ptr_.count(name)) return name_method_ptr_.at(name);
+    else return nullptr;
 }
 
-[[nodiscard]] const std::string& Class::GetName() const {
+const std::string& Class::GetName() const {
     return name_;
 }
 
-void Class::Print(ostream& os, [[maybe_unused]] Context& context) {
-    os << "Class " << GetName();
+void Class::Print(ostream& os, Context& /*context*/) {
+    os << "Class " << name_;
 }
 
-void Bool::Print(std::ostream& os, [[maybe_unused]] Context& context) {
+void Bool::Print(std::ostream& os, [[maybe_unused]] Context& /*context*/) {
     os << (GetValue() ? "True"sv : "False"sv);
 }
 
 bool Equal(const ObjectHolder& lhs, const ObjectHolder& rhs, Context& context) {
-    if (lhs.TryAs<Number>() && rhs.TryAs<Number>()) {
-        return lhs.TryAs<Number>()->GetValue() == rhs.TryAs<Number>()->GetValue();
-    }
-    else if (lhs.TryAs<String>() && rhs.TryAs<String>()) {
-        return lhs.TryAs<String>()->GetValue() == rhs.TryAs<String>()->GetValue();
-    }
-    else if (lhs.TryAs<Bool>() && rhs.TryAs<Bool>()) {
-        return lhs.TryAs<Bool>()->GetValue() == rhs.TryAs<Bool>()->GetValue();
-    }
-    else if (!lhs && !rhs) {
-        return true;
-    }
-    else if (lhs.TryAs<ClassInstance>() && lhs.TryAs<ClassInstance>()->HasMethod("__eq__"s, 1)) {
-        return lhs.TryAs<ClassInstance>()->Call("__eq__"s, {rhs}, context).TryAs<Bool>()->GetValue();
-    }
+    auto lhs_ptr_number = lhs.TryAs<Number>();
+    auto rhs_ptr_number = rhs.TryAs<Number>();
+    if (lhs_ptr_number && rhs_ptr_number) return lhs_ptr_number->GetValue() == rhs_ptr_number->GetValue();
+
+    auto lhs_ptr_str = lhs.TryAs<String>();
+    auto rhs_ptr_str = rhs.TryAs<String>();
+    if (lhs_ptr_str && rhs_ptr_str) return lhs_ptr_str->GetValue() == rhs_ptr_str->GetValue();
+
+    auto lhs_ptr_bool = lhs.TryAs<Bool>();
+    auto rhs_ptr_bool = rhs.TryAs<Bool>();
+    if (lhs_ptr_bool && rhs_ptr_bool) return lhs_ptr_bool->GetValue() == rhs_ptr_bool->GetValue();
+
+    auto lhs_ptr_class = lhs.TryAs<ClassInstance>();
+    if (lhs_ptr_class && lhs_ptr_class->HasMethod("__eq__", 1)) return lhs_ptr_class->Call("__eq__", { rhs }, context).TryAs<Bool>()->GetValue();
+
+    if (!lhs && !rhs) return true;
+    
     throw std::runtime_error("Cannot compare objects for equality"s);
 }
 
 bool Less(const ObjectHolder& lhs, const ObjectHolder& rhs, Context& context) {
-    if (lhs.TryAs<Number>() && rhs.TryAs<Number>()) {
-        return lhs.TryAs<Number>()->GetValue() < rhs.TryAs<Number>()->GetValue();
-    }
-    else if (lhs.TryAs<String>() && rhs.TryAs<String>()) {
-        return lhs.TryAs<String>()->GetValue() < rhs.TryAs<String>()->GetValue();
-    }
-    else if (lhs.TryAs<Bool>() && rhs.TryAs<Bool>()) {
-        return lhs.TryAs<Bool>()->GetValue() < rhs.TryAs<Bool>()->GetValue();
-    }
-    else if (lhs.TryAs<ClassInstance>() && lhs.TryAs<ClassInstance>()->HasMethod("__lt__"s, 1)) {
-        return lhs.TryAs<ClassInstance>()->Call("__lt__"s, { rhs }, context).TryAs<Bool>()->GetValue();
-    }
+    auto lhs_ptr_number = lhs.TryAs<Number>();
+    auto rhs_ptr_number = rhs.TryAs<Number>();
+    if (lhs_ptr_number && rhs_ptr_number) return lhs_ptr_number->GetValue() < rhs_ptr_number->GetValue();
+
+    auto lhs_ptr_str = lhs.TryAs<String>();
+    auto rhs_ptr_str = rhs.TryAs<String>();
+    if (lhs_ptr_str && rhs_ptr_str) return lhs_ptr_str->GetValue() < rhs_ptr_str->GetValue();
+
+    auto lhs_ptr_bool = lhs.TryAs<Bool>();
+    auto rhs_ptr_bool = rhs.TryAs<Bool>();
+    if (lhs_ptr_bool && rhs_ptr_bool) return lhs_ptr_bool->GetValue() < rhs_ptr_bool->GetValue();
+
+    auto lhs_ptr_class = lhs.TryAs<ClassInstance>();
+    if (lhs_ptr_class && lhs_ptr_class->HasMethod("__lt__", 1)) return lhs_ptr_class->Call("__lt__", { rhs }, context).TryAs<Bool>()->GetValue();
+    
     throw std::runtime_error("Cannot compare objects for less"s);
 }
 
@@ -186,7 +176,7 @@ bool Greater(const ObjectHolder& lhs, const ObjectHolder& rhs, Context& context)
 }
 
 bool LessOrEqual(const ObjectHolder& lhs, const ObjectHolder& rhs, Context& context) {
-    return !Greater(lhs, rhs, context);
+    return Less(lhs, rhs, context) || Equal(lhs, rhs, context);
 }
 
 bool GreaterOrEqual(const ObjectHolder& lhs, const ObjectHolder& rhs, Context& context) {

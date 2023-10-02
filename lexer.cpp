@@ -8,296 +8,235 @@ using namespace std;
 
 namespace parse {
 
-    bool operator==(const Token& lhs, const Token& rhs) {
-        using namespace token_type;
+bool operator==(const Token& lhs, const Token& rhs) {
+    using namespace token_type;
 
-        if (lhs.index() != rhs.index()) {
-            return false;
-        }
-        if (lhs.Is<Char>()) {
-            return lhs.As<Char>().value == rhs.As<Char>().value;
-        }
-        if (lhs.Is<Number>()) {
-            return lhs.As<Number>().value == rhs.As<Number>().value;
-        }
-        if (lhs.Is<String>()) {
-            return lhs.As<String>().value == rhs.As<String>().value;
-        }
-        if (lhs.Is<Id>()) {
-            return lhs.As<Id>().value == rhs.As<Id>().value;
-        }
-        return true;
+    if (lhs.index() != rhs.index()) {
+        return false;
     }
-
-    bool operator!=(const Token& lhs, const Token& rhs) {
-        return !(lhs == rhs);
+    if (lhs.Is<Char>()) {
+        return lhs.As<Char>().value == rhs.As<Char>().value;
     }
+    if (lhs.Is<Number>()) {
+        return lhs.As<Number>().value == rhs.As<Number>().value;
+    }
+    if (lhs.Is<String>()) {
+        return lhs.As<String>().value == rhs.As<String>().value;
+    }
+    if (lhs.Is<Id>()) {
+        return lhs.As<Id>().value == rhs.As<Id>().value;
+    }
+    return true;
+}
 
-    std::ostream& operator<<(std::ostream& os, const Token& rhs) {
-        using namespace token_type;
+bool operator!=(const Token& lhs, const Token& rhs) {
+    return !(lhs == rhs);
+}
+
+std::ostream& operator<<(std::ostream& os, const Token& rhs) {
+    using namespace token_type;
 
 #define VALUED_OUTPUT(type) \
     if (auto p = rhs.TryAs<type>()) return os << #type << '{' << p->value << '}';
 
-        VALUED_OUTPUT(Number);
-        VALUED_OUTPUT(Id);
-        VALUED_OUTPUT(String);
-        VALUED_OUTPUT(Char);
+    VALUED_OUTPUT(Number);
+    VALUED_OUTPUT(Id);
+    VALUED_OUTPUT(String);
+    VALUED_OUTPUT(Char);
 
 #undef VALUED_OUTPUT
 
 #define UNVALUED_OUTPUT(type) \
     if (rhs.Is<type>()) return os << #type;
 
-        UNVALUED_OUTPUT(Class);
-        UNVALUED_OUTPUT(Return);
-        UNVALUED_OUTPUT(If);
-        UNVALUED_OUTPUT(Else);
-        UNVALUED_OUTPUT(Def);
-        UNVALUED_OUTPUT(Newline);
-        UNVALUED_OUTPUT(Print);
-        UNVALUED_OUTPUT(Indent);
-        UNVALUED_OUTPUT(Dedent);
-        UNVALUED_OUTPUT(And);
-        UNVALUED_OUTPUT(Or);
-        UNVALUED_OUTPUT(Not);
-        UNVALUED_OUTPUT(Eq);
-        UNVALUED_OUTPUT(NotEq);
-        UNVALUED_OUTPUT(LessOrEq);
-        UNVALUED_OUTPUT(GreaterOrEq);
-        UNVALUED_OUTPUT(None);
-        UNVALUED_OUTPUT(True);
-        UNVALUED_OUTPUT(False);
-        UNVALUED_OUTPUT(Eof);
+    UNVALUED_OUTPUT(Class);
+    UNVALUED_OUTPUT(Return);
+    UNVALUED_OUTPUT(If);
+    UNVALUED_OUTPUT(Else);
+    UNVALUED_OUTPUT(Def);
+    UNVALUED_OUTPUT(Newline);
+    UNVALUED_OUTPUT(Print);
+    UNVALUED_OUTPUT(Indent);
+    UNVALUED_OUTPUT(Dedent);
+    UNVALUED_OUTPUT(And);
+    UNVALUED_OUTPUT(Or);
+    UNVALUED_OUTPUT(Not);
+    UNVALUED_OUTPUT(Eq);
+    UNVALUED_OUTPUT(NotEq);
+    UNVALUED_OUTPUT(LessOrEq);
+    UNVALUED_OUTPUT(GreaterOrEq);
+    UNVALUED_OUTPUT(None);
+    UNVALUED_OUTPUT(True);
+    UNVALUED_OUTPUT(False);
+    UNVALUED_OUTPUT(Eof);
 
 #undef UNVALUED_OUTPUT
 
-        return os << "Unknown token :("sv;
-    }
+    return os << "Unknown token :("sv;
+}
 
-    Lexer::Lexer(std::istream& in) {
-        using namespace parse;
-        using namespace token_type;
+Lexer::Lexer(std::istream& input) {
+    string str;
+    while (getline(input, str)) {
+        if (str.empty()) continue;
+        
+        size_t i = 0;
+        while (str[i] == ' ') ++i;
 
-        std::string inp_line;
-        while (getline(in, inp_line)) {
-
-            if (EmptyLine(inp_line)) {
-                continue;
+        if (i % 2 == 0) {
+            while (i > indent_) {
+                tokens_.push_back(token_type::Indent());
+                indent_ += 2;
             }
-
-            SetIndentLevel(CheckAndCutLine(inp_line));
-            std::istringstream istring(inp_line);
-            ReadLine(istring);
-        }
-
-        SetIndentLevel(0);
-
-        line_.push_back(Eof{});
-    }
-
-    const Token& Lexer::CurrentToken() const {
-        if (head_ < line_.size()) {
-            return line_[head_];
-        }
-        throw std::logic_error("Not implemented"s);
-    }
-
-    Token Lexer::NextToken() {
-        if ((head_ + 1) < line_.size()) {
-            head_++;
-        }
-        return CurrentToken();
-    }
-    
-    size_t Lexer::CheckAndCutLine(std::string& in) const {
-        size_t result = in.find_first_not_of(' ', 0);
-        if (result >= 2) {
-            result /= 2;
-        }
-        in = in.substr(result);
-        return result;
-    }
-
-    void Lexer::SetIndentLevel(const size_t new_level) {
-        using namespace parse::token_type;
-        for (size_t i = indent_level_; i < new_level; ++i) {
-            line_.push_back(Indent({}));
-        }
-        for (size_t i = indent_level_; i > new_level; --i) {
-            line_.push_back(Dedent({}));
-        }
-        if (indent_level_ != new_level) {
-            indent_level_ = new_level;
-        }
-    }
-
-    void Lexer::ReadLine(std::istringstream& istring) {
-        using namespace parse::token_type;
-        char t;
-        bool new_line = false;
-        while (istring.get(t)) {
-            if (t == ' ') {
-                continue;
-            }
-            if (t == '#') {
-                istring.ignore(numeric_limits<streamsize>::max(), '\n');
-                line_.push_back(Newline{});
-                return;
-            }
-
-            new_line = true;
-            if (isdigit(t)) {
-                ReadNumber(istring);
-            }
-            else if (isprint(t) || isspace(t)) {
-                switch (t) {
-                case '=': case '!': case '<': case'>': {
-                    if (istring.peek() == '=') {
-                        if (t == '=') {
-                            line_.push_back(Eq({}));
-                        }
-                        else if (t == '!') {
-                            line_.push_back(NotEq({}));
-                        }
-                        else if (t == '<') {
-                            line_.push_back(LessOrEq({}));
-                        }
-                        else {
-                            line_.push_back(GreaterOrEq({}));
-                        }
-                        istring.get();
-                        break;
-                    }
-                    [[fallthrough]];
-                }
-
-                case '*': case '/': case '+': case '-': case '(': case ')': case '?':
-                case ',': case '.': case ':': case ';': case '\t': case '\n': {
-
-                    line_.push_back(Char{ t });
-                    break;
-                }
-                case '\'': case '\"': {
-                    ReadString(istring, t);
-                    break;
-                }
-                default: {
-                    istring.unget();
-                    ReadId(istring);
-                }
-                }
+            while (i < indent_) {
+                tokens_.push_back(token_type::Dedent());
+                indent_ -= 2;
             }
         }
-        if (new_line) {
-            line_.push_back(Newline{});
-        }
+        str.erase(0, i);
+
+        if (str[i] == '#') continue;
+        while (!str.empty()) Parse(str);
+        
+        tokens_.push_back(token_type::Newline());
+    }
+    while (indent_) {
+        tokens_.push_back(token_type::Dedent());
+        indent_ -= 2;
     }
 
-    void Lexer::ReadId(std::istringstream& istring) {
-        using namespace parse::token_type;
-        std::string s;
-        char c;
-        while (istring.get(c)) {
-            if ((isspace(c) || c == ' ') || (ispunct(c) && c != '_')) {
-                if (ispunct(c) && c != '_') {
-                    istring.unget();
-                }
-                break;
-            }
-            s += c;
-        }
-        if (s == "class") {
-            line_.push_back(Class({}));
-        }
-        else if (s == "return") {
-            line_.push_back(Return({}));
-        }
-        else if (s == "if") {
-            line_.push_back(If({}));
-        }
-        else if (s == "else") {
-            line_.push_back(Else({}));
-        }
-        else if (s == "def") {
-            line_.push_back(Def({}));
-        }
-        else if (s == "print") {
-            line_.push_back(Print({}));
-        }
-        else if (s == "or") {
-            line_.push_back(Or({}));
-        }
-        else if (s == "None") {
-            line_.push_back(None({}));
-        }
-        else if (s == "and") {
-            line_.push_back(And({}));
-        }
-        else if (s == "not") {
-            line_.push_back(Not({}));
-        }
-        else if (s == "True") {
-            line_.push_back(True({}));
-        }
-        else if (s == "False") {
-            line_.push_back(False({}));
-        }
-        else {
-            line_.push_back(Id({ s }));
-        }
+    tokens_.push_back(token_type::Eof());
+}
+
+const Token& Lexer::CurrentToken() const {
+    return tokens_[id_];
+
+    throw std::logic_error("Not implemented"s);
+}
+
+Token Lexer::NextToken() {
+    if (id_ + 1 < tokens_.size()) ++id_;
+    return tokens_[id_];
+
+    throw std::logic_error("Not implemented"s);
+}
+
+void Lexer::Parse(string& str) {
+    size_t i = 0;
+    while (i < str.size() && str[i] == ' ')
+        ++i;
+    str.erase(0, i);
+
+    if (str[0] == '\'' || str[0] == '\"') {
+        ParseString(str);
+    }
+    else if ((str[0] >= '0' && str[0] <= '9') || (str.size() > 1 && str[0] == '-' && str[1] >= '1' && str[1] <= '9')) {
+        ParseNumber(str);
+    }
+    else if (str[0] == '_' || (str[0] >= 'a' && str[0] <= 'z') || (str[0] >= 'A' && str[0] <= 'Z') ||
+        (str.size() > 1 && (str.substr(0, 2) == "==" || str.substr(0, 2) == "!=" || str.substr(0, 2) == "<=" || str.substr(0, 2) == ">="))) {
+        ParseID(str);
+    }
+    else if (str[0] != '#') {
+        tokens_.push_back(token_type::Char{ str[0] });
+        str.erase(0, 1);
+    }
+    else {
+        str.clear();
+    }
+}
+
+void Lexer::ParseNumber(string& str) {
+    string value;
+    size_t i = 0;
+
+    if (str[0] == '-') {
+        tokens_.push_back(token_type::Char{ '-' });
+        i = 1;
     }
 
-    void Lexer::ReadString(std::istringstream& in, const char d) {
-        std::string str;
-        char ch;
-        while (in.get(ch)) {
-            if (ch == d) {
-                break;
-            }
-            if (ch == '\\') {
-                in.get(ch);
-                switch (ch) {
-                case 'n':
-                    ch = '\n';
-                    break;
-                case 't':
-                    ch = '\t';
-                }
-                str += ch;
-            }
-            else {
-                str += ch;
-            }
+    while (i < str.size() && str[i] >= '0' && str[i] <= '9') {
+        value += str[i++];
+    }
+    tokens_.push_back(token_type::Number{ stoi(value) });
+    str.erase(0, i);
 
+}
+
+void Lexer::ParseString(string& str) {
+    string value;
+    char separate = str[0];
+    size_t i = 1;
+
+    while (i < str.size() && str[i] != separate) {
+        if (str[i] == '\\' && i + 1 < str.size()) {
+            ++i;
+            if (str[i] == 'n')
+                value += '\n';
+            else if (str[i] == 't')
+                value += '\t';
+            else if (str[i] == '\'')
+                value += '\'';
+            else if (str[i] == '\"')
+                value += '\"';
+            else if (str[i] == '\\')
+                value += '\\';
         }
-        line_.push_back(parse::token_type::String{ str });
+        else
+            value += str[i];
+        ++i;
+    }
+    tokens_.push_back(token_type::String{ value });
+    str.erase(0, i + 1);
+}
+
+void Lexer::ParseID(string& str) {
+    string value;
+    size_t i = 0;
+    while (i < str.size() && str[i] != ' ' && str[i] != '(' && str[i] != ')' && str[i] != ':' && str[i] != ',' && str[i] != '.' && str[i] != '#') {
+        value += str[i++];
     }
 
-    void Lexer::ReadNumber(std::istringstream& in) {
-        in.unget();
-        int d;
-        in >> d;
-        line_.push_back(parse::token_type::Number{ d });
-    }
+    if (value == "class")
+        tokens_.push_back(token_type::Class());
+    else if (value == "return")
+        tokens_.push_back(token_type::Return());
+    else if (value == "if")
+        tokens_.push_back(token_type::If());
+    else if (value == "else")
+        tokens_.push_back(token_type::Else());
+    else if (value == "def")
+        tokens_.push_back(token_type::Def());
+    else if (value == "print")
+        tokens_.push_back(token_type::Print());
+    else if (value == "  ")
+        tokens_.push_back(token_type::Indent());
+    else if (value == "  ")
+        tokens_.push_back(token_type::Dedent());
+    else if (value == "and")
+        tokens_.push_back(token_type::And());
+    else if (value == "or")
+        tokens_.push_back(token_type::Or());
+    else if (value == "not")
+        tokens_.push_back(token_type::Not());
+    else if (value == "==")
+        tokens_.push_back(token_type::Eq());
+    else if (value == "!=")
+        tokens_.push_back(token_type::NotEq());
+    else if (value == "<=")
+        tokens_.push_back(token_type::LessOrEq());
+    else if (value == ">=")
+        tokens_.push_back(token_type::GreaterOrEq());
+    else if (value == "None")
+        tokens_.push_back(token_type::None());
+    else if (value == "True")
+        tokens_.push_back(token_type::True());
+    else if (value == "False")
+        tokens_.push_back(token_type::False());
+    else
+        tokens_.push_back(token_type::Id{ value });
 
-    bool Lexer::EmptyLine(const std::string_view line) const {
-        if (line.size() == 0) {
-            return true;
-        }
-        size_t p = line.find_first_not_of(' ');
-        if (line[p] == '#' || (p > 0 && p == (line.size() - 1))) {
-            return true;
-        }
-        return false;
-    }
+    str.erase(0, i);
+}
 
-    int Lexer::IndentLevelOfLine(const std::string_view line)const {
-        size_t result = line.find_first_not_of(' ', 0);
-        if (result >= 2) {
-            result /= 2;
-        }
-        return result;
-    }
-    
 }  // namespace parse
